@@ -44,9 +44,43 @@ function onResults(results) {
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    // Mirror the video image
+    // Mirror the video image ONLY if using front camera ('user')
     canvasCtx.translate(canvasElement.width, 0);
-    canvasCtx.scale(-1, 1);
+    if (currentFacingMode === 'user') {
+        canvasCtx.scale(-1, 1);
+    } else {
+        // For back camera, we don't want mirror effect usually, 
+        // BUT MediaPipe Pose expects a certain orientation. 
+        // If we don't mirror, the drawing might be inverted relative to the video if we used translated context.
+        // Actually, standard behavior:
+        // Front (User): Mirrored. (User moves right, image moves right).
+        // Back (Env): Not Mirrored. (User moves right, image moves left... wait).
+        // Let's stick to standard behavior.
+        // If we translated (width, 0), then scale(-1, 1) flips it.
+        // If we want NORMAL (no flip), we should NOT translate/scale like that, 
+        // OR we translate (0,0) and scale (1,1).
+
+        // Reset transformation from the translate above if we are NOT mirroring
+        // Wait, the previous line `canvasCtx.translate(canvasElement.width, 0);` is already applied.
+        // If we want normal, we need to undo that or handle it.
+        // For simplicity:
+        // User (Front):  Translate(w, 0) -> Scale(-1, 1)  (Original code)
+        // Env (Back):    Translate(0, 0) -> Scale(1, 1)
+    }
+
+    // Resetting the transform logic for clarity:
+    canvasCtx.restore(); // Restore to clean state (saved at line 44)
+    canvasCtx.save(); // Save again for drawing
+
+    if (currentFacingMode === 'user') {
+        // Mirror
+        canvasCtx.translate(canvasElement.width, 0);
+        canvasCtx.scale(-1, 1);
+    } else {
+        // Normal (No mirror)
+        // No extra transform needed
+    }
+
     canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
     canvasCtx.restore();
 
@@ -69,9 +103,17 @@ function drawUniform(landmarks) {
     const height = canvasElement.height;
 
     // Shoulder points
-    const x1 = (1 - leftShoulder.x) * width;
+    // Shoulder points
+    let x1, x2;
+    if (currentFacingMode === 'user') {
+        x1 = (1 - leftShoulder.x) * width;
+        x2 = (1 - rightShoulder.x) * width;
+    } else {
+        x1 = leftShoulder.x * width;
+        x2 = rightShoulder.x * width;
+    }
+
     const y1 = leftShoulder.y * height;
-    const x2 = (1 - rightShoulder.x) * width;
     const y2 = rightShoulder.y * height;
 
     const shoulderCenterX = (x1 + x2) / 2;
@@ -93,9 +135,17 @@ function drawUniform(landmarks) {
 
     if (hipsVisible) {
         // --- Torso Logic (Shoulder to Hip) ---
-        const x3 = (1 - leftHip.x) * width;
+        // --- Torso Logic (Shoulder to Hip) ---
+        let x3, x4;
+        if (currentFacingMode === 'user') {
+            x3 = (1 - leftHip.x) * width;
+            x4 = (1 - rightHip.x) * width;
+        } else {
+            x3 = leftHip.x * width;
+            x4 = rightHip.x * width;
+        }
+
         const y3 = leftHip.y * height;
-        const x4 = (1 - rightHip.x) * width;
         const y4 = rightHip.y * height;
 
         const hipCenterX = (x3 + x4) / 2;
@@ -170,21 +220,90 @@ pose.setOptions({
 
 pose.onResults(onResults);
 
-// Setup Camera
-// We use MediaPipe Camera Utils which simplifies the rAF loop
-const camera = new Camera(videoElement, {
-    onFrame: async () => {
+// Custom Camera Handling
+let animationFrameId;
+let currentFacingMode = 'user'; // 'user' (front) or 'environment' (back)
+
+const switchCameraBtn = document.getElementById('switch-camera-btn');
+
+// Stop current video stream
+function stopCamera() {
+    if (videoElement.srcObject) {
+        const stream = videoElement.srcObject;
+        const tracks = stream.getTracks();
+        tracks.forEach(track => track.stop());
+        videoElement.srcObject = null;
+    }
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+}
+
+// Start Camera with specific facing mode
+async function startCamera(facingMode) {
+    stopCamera();
+    loadingOverlay.style.display = 'flex';
+
+    // Constraints
+    const constraints = {
+        video: {
+            facingMode: facingMode,
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+        },
+        audio: false
+    };
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        videoElement.srcObject = stream;
+
+        // Wait for video to be ready
+        videoElement.onloadedmetadata = () => {
+            videoElement.play();
+            loadingOverlay.style.display = 'none';
+            // Start detection loop
+            detectPose();
+        };
+    } catch (err) {
+        console.error("Error starting camera:", err);
+        loadingOverlay.innerHTML = "<p>カメラの起動に失敗しました。<br>カメラの許可またはhttps接続を確認してください。</p>";
+        loadingOverlay.style.display = 'flex';
+    }
+}
+
+// Detection Loop
+async function detectPose() {
+    if (!videoElement.paused && !videoElement.ended) {
         await pose.send({ image: videoElement });
-    },
-    width: 640,
-    height: 480
+        animationFrameId = requestAnimationFrame(detectPose);
+    }
+}
+
+// Handle Camera Switch
+switchCameraBtn.addEventListener('click', () => {
+    currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+    startCamera(currentFacingMode);
 });
 
-camera.start().then(() => {
+
+// Logic for onResults needs update for mirroring
+// We update the onResults function to handle mirroring based on facing mode
+
+// Replace the original onResults with this modified version
+// OR we can modify the existing onResults. 
+// Let's modify the existing onResults to support the new logic.
+// Note: This block replaces the initialization code, NOT onResults (which is defined earlier).
+// But onResults is defined BEFORE this block in the file (lines 33-56).
+// We need to make sure onResults uses the correct mirroring.
+// Since we cannot edit onResults easily from here without re-writing the whole file or using multi_replace carefully,
+// I will rely on the fact that I am replacing the Camera util block.
+// BUT, onResults uses canvasCtx.scale(-1, 1). This is hardcoded mirroring.
+// We need to change that.
+
+// Let's first start the camera
+startCamera(currentFacingMode).then(() => {
     console.log("Camera started");
-}).catch(err => {
-    console.error("Error starting camera:", err);
-    loadingOverlay.innerHTML = "<p>カメラの起動に失敗しました。<br>カメラの許可を確認してください。</p>";
 });
 
 // Capture and Save
