@@ -198,6 +198,13 @@ function drawUniform(landmarks) {
     canvasCtx.save();
     canvasCtx.translate(anchorX, anchorY);
     canvasCtx.rotate(angle);
+
+    if (currentFacingMode === 'environment') {
+        // Back camera often results in 180 degree rotation because L/R shoulders are swapped visually
+        // flipping Y corrects the upside-down issue while maintaining correct L/R mapping
+        canvasCtx.scale(1, -1);
+    }
+
     canvasCtx.drawImage(img, -imgWidth / 2, -imgHeight / 2 + yAdjust, imgWidth, imgHeight);
     canvasCtx.restore();
 }
