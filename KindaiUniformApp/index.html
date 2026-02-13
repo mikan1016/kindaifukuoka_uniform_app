@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>近大福岡制服着せ替えアプリ</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- MediaPipe Pose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script defer src="script.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>近大福岡制服 着せ替えカメラ</h1>
+        </header>
+
+        <div class="camera-wrapper">
+            <video id="video" autoplay muted playsinline></video>
+            <canvas id="overlay"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="uniform-selector">
+                <label>
+                    <input type="radio" name="uniform" value="male" checked>
+                    男子制服
+                </label>
+                <label>
+                    <input type="radio" name="uniform" value="female">
+                    女子制服
+                </label>
+            </div>
+            <button id="capture-btn" class="btn">撮影する</button>
+            <div id="result-controls" style="display: none; gap: 10px;">
+                <button id="save-btn" class="btn" style="background-color: #28a745;">保存する</button>
+                <button id="retry-btn" class="btn" style="background-color: #6c757d;">撮り直す</button>
+            </div>
+        </div>
+
+        <div id="loading-overlay">
+            <div class="loader"></div>
+            <p>カメラとAIモデルを準備中...</p>
+        </div>
+    </div>
+</body>
+
+</html>
